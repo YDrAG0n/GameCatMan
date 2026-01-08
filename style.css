@@ -1,0 +1,127 @@
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Arial', sans-serif;
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    min-height: 100vh;
+    padding: 20px;
+}
+
+.game-container {
+    background: white;
+    border-radius: 20px;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+    padding: 20px;
+    max-width: 900px;
+    width: 100%;
+}
+
+.game-header {
+    text-align: center;
+    margin-bottom: 20px;
+}
+
+.game-header h1 {
+    color: #333;
+    margin-bottom: 10px;
+    font-size: 2em;
+}
+
+.controls-info {
+    background: #f0f0f0;
+    padding: 10px;
+    border-radius: 10px;
+    margin: 10px 0;
+    font-size: 0.9em;
+    color: #555;
+}
+
+.game-stats {
+    display: flex;
+    justify-content: space-around;
+    margin-top: 10px;
+    font-weight: bold;
+    color: #667eea;
+}
+
+#gameCanvas {
+    display: block;
+    border: 3px solid #333;
+    border-radius: 10px;
+    background: #1a1a1a;
+    width: 100%;
+    max-width: 850px;
+    margin: 0 auto;
+}
+
+.game-overlay {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: rgba(0, 0, 0, 0.8);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    border-radius: 20px;
+    z-index: 10;
+}
+
+.overlay-content {
+    background: white;
+    padding: 40px;
+    border-radius: 15px;
+    text-align: center;
+    max-width: 400px;
+}
+
+.overlay-content h2 {
+    color: #333;
+    margin-bottom: 15px;
+    font-size: 2em;
+}
+
+.overlay-content p {
+    color: #666;
+    margin-bottom: 25px;
+    line-height: 1.6;
+}
+
+button {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    border: none;
+    padding: 15px 40px;
+    font-size: 1.1em;
+    border-radius: 25px;
+    cursor: pointer;
+    transition: transform 0.2s, box-shadow 0.2s;
+    font-weight: bold;
+}
+
+button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+button:active {
+    transform: translateY(0);
+}
+
+#gameCanvas {
+    cursor: none;
+    position: relative;
+}
+
+#gameCanvas:focus {
+    outline: 2px solid #667eea;
+    outline-offset: 2px;
+}
