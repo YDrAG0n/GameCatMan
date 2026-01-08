@@ -27,7 +27,7 @@ let player = {
     pixelY: 0,
     width: 20,
     height: 30,
-    speed: 0.2, // Скорость движения между клетками (0-1)
+    speed: 0.26, // Скорость движения между клетками (0-1) - на 30% быстрее
     direction: null, // 'up', 'down', 'left', 'right'
     nextDirection: null, // Следующее направление (для плавного поворота)
     isJumping: false,
