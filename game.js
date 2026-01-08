@@ -21,29 +21,33 @@ let maze = [];
 
 // Персонажи
 let player = {
-    x: 50,
-    y: 50,
+    gridX: 2,  // Позиция в сетке
+    gridY: 2,
+    pixelX: 0, // Точная позиция в пикселях для плавного движения
+    pixelY: 0,
     width: 20,
     height: 30,
-    speed: 3,
-    vx: 0,
-    vy: 0,
+    speed: 0.2, // Скорость движения между клетками (0-1)
+    direction: null, // 'up', 'down', 'left', 'right'
+    nextDirection: null, // Следующее направление (для плавного поворота)
     isJumping: false,
     isCrouching: false,
-    jumpPower: -8,
-    gravity: 0.5,
-    velocityY: 0,
-    onGround: false,
+    jumpTimer: 0, // Таймер прыжка
+    crouchTimer: 0, // Таймер приседания
     color: '#FF8C00', // Оранжевый
     number: 14
 };
 
 let cat = {
-    x: 800,
-    y: 550,
+    gridX: 32,
+    gridY: 22,
+    pixelX: 0,
+    pixelY: 0,
     width: 20,
     height: 20,
-    speed: 2.5,
+    speed: 0.16,
+    direction: null,
+    nextDirection: null,
     color: '#FFA500'
 };
 
@@ -138,36 +142,36 @@ function generateTraps() {
     }
 }
 
-// Проверка коллизии со стенами
-function checkWallCollision(x, y, width, height) {
-    const left = Math.floor(x / CELL_SIZE);
-    const right = Math.floor((x + width) / CELL_SIZE);
-    const top = Math.floor(y / CELL_SIZE);
-    const bottom = Math.floor((y + height) / CELL_SIZE);
-    
-    for (let row = top; row <= bottom; row++) {
-        for (let col = left; col <= right; col++) {
-            if (row < 0 || row >= MAZE_ROWS || col < 0 || col >= MAZE_COLS) {
-                return true;
-            }
-            if (maze[row][col] === 0) {
-                return true;
-            }
-        }
+// Проверка, можно ли двигаться в указанную клетку
+function canMoveTo(gridX, gridY) {
+    if (gridX < 0 || gridX >= MAZE_COLS || gridY < 0 || gridY >= MAZE_ROWS) {
+        return false;
     }
-    return false;
+    return maze[gridY][gridX] === 1;
+}
+
+// Получить пиксельные координаты из сетки
+function gridToPixel(gridX, gridY) {
+    return {
+        x: gridX * CELL_SIZE + CELL_SIZE / 2,
+        y: gridY * CELL_SIZE + CELL_SIZE / 2
+    };
 }
 
 // Проверка коллизии с ловушками
-function checkTrapCollision(x, y, width, height, isCrouching, isJumping) {
+function checkTrapCollision(gridX, gridY, isCrouching, isJumping) {
+    const pixelPos = gridToPixel(gridX, gridY);
+    const playerX = pixelPos.x - player.width / 2;
+    const playerY = pixelPos.y - player.height / 2;
+    
     for (let trap of traps) {
         if (!trap.active) continue;
         
-        if (x < trap.x + trap.width &&
-            x + width > trap.x &&
-            y < trap.y + trap.height &&
-            y + height > trap.y) {
-            
+        // Проверяем, находится ли игрок в той же клетке, что и ловушка
+        const trapGridX = Math.floor(trap.x / CELL_SIZE);
+        const trapGridY = Math.floor(trap.y / CELL_SIZE);
+        
+        if (gridX === trapGridX && gridY === trapGridY) {
             // Низкая ловушка - нужно присесть
             if (trap.type === 'low' && !isCrouching) {
                 return true;
@@ -183,128 +187,268 @@ function checkTrapCollision(x, y, width, height, isCrouching, isJumping) {
 
 // Обновление игрока
 function updatePlayer() {
-    // Горизонтальное движение
-    player.vx = 0;
-    if (keys['ArrowLeft']) player.vx = -player.speed;
-    if (keys['ArrowRight']) player.vx = player.speed;
+    // Обработка ввода направления
+    if (keys['ArrowLeft']) player.nextDirection = 'left';
+    if (keys['ArrowRight']) player.nextDirection = 'right';
+    if (keys['ArrowUp']) player.nextDirection = 'up';
+    if (keys['ArrowDown']) player.nextDirection = 'down';
     
-    // Вертикальное движение (прыжок)
-    if (keys[' '] && player.onGround && !player.isJumping) {
-        player.velocityY = player.jumpPower;
+    // Прыжок (пробел)
+    if (keys[' '] && !player.isJumping && player.jumpTimer === 0) {
         player.isJumping = true;
-        player.onGround = false;
+        player.jumpTimer = 20; // Длительность прыжка в кадрах
     }
     
-    // Приседание
-    player.isCrouching = keys['s'] || keys['S'];
+    // Приседание (S)
+    player.isCrouching = (keys['s'] || keys['S']) && !player.isJumping;
     
-    // Гравитация
-    if (!player.onGround) {
-        player.velocityY += player.gravity;
-    }
-    
-    // Применение движения
-    let newX = player.x + player.vx;
-    let newY = player.y + player.velocityY;
-    
-    // Проверка коллизий со стенами
-    const playerHeight = player.isCrouching ? player.height / 2 : player.height;
-    if (!checkWallCollision(newX, player.y, player.width, playerHeight)) {
-        player.x = newX;
-    }
-    
-    // Проверка коллизий по вертикали
-    if (!checkWallCollision(player.x, newY, player.width, playerHeight)) {
-        player.y = newY;
-        if (player.y + playerHeight >= CANVAS_HEIGHT - CELL_SIZE) {
-            player.y = CANVAS_HEIGHT - CELL_SIZE - playerHeight;
-            player.onGround = true;
-            player.velocityY = 0;
+    // Обновление таймеров
+    if (player.jumpTimer > 0) {
+        player.jumpTimer--;
+        if (player.jumpTimer === 0) {
             player.isJumping = false;
-        } else {
-            // Проверка на землю
-            const belowY = player.y + playerHeight + 1;
-            if (checkWallCollision(player.x, belowY, player.width, 1)) {
-                player.onGround = true;
-                player.velocityY = 0;
-                player.isJumping = false;
-            } else {
-                player.onGround = false;
+        }
+    }
+    
+    // Если игрок находится в центре клетки, можно сменить направление
+    const centerX = player.gridX * CELL_SIZE + CELL_SIZE / 2;
+    const centerY = player.gridY * CELL_SIZE + CELL_SIZE / 2;
+    const distToCenter = Math.abs(player.pixelX - centerX) + Math.abs(player.pixelY - centerY);
+    
+    if (distToCenter < 3) {
+        // Выравниваем позицию
+        player.pixelX = centerX;
+        player.pixelY = centerY;
+        
+        // Обновляем grid позицию
+        player.gridX = Math.floor(player.pixelX / CELL_SIZE);
+        player.gridY = Math.floor(player.pixelY / CELL_SIZE);
+        
+        // Проверяем, можно ли повернуть в новом направлении
+        if (player.nextDirection) {
+            let newGridX = player.gridX;
+            let newGridY = player.gridY;
+            
+            if (player.nextDirection === 'left') newGridX--;
+            if (player.nextDirection === 'right') newGridX++;
+            if (player.nextDirection === 'up') newGridY--;
+            if (player.nextDirection === 'down') newGridY++;
+            
+            if (canMoveTo(newGridX, newGridY)) {
+                player.direction = player.nextDirection;
             }
         }
-    } else {
-        if (player.velocityY > 0) {
-            player.onGround = true;
-            player.velocityY = 0;
-            player.isJumping = false;
+        
+        // Если нет направления, пробуем установить его
+        if (!player.direction && player.nextDirection) {
+            let newGridX = player.gridX;
+            let newGridY = player.gridY;
+            
+            if (player.nextDirection === 'left') newGridX--;
+            if (player.nextDirection === 'right') newGridX++;
+            if (player.nextDirection === 'up') newGridY--;
+            if (player.nextDirection === 'down') newGridY++;
+            
+            if (canMoveTo(newGridX, newGridY)) {
+                player.direction = player.nextDirection;
+            }
+        }
+    }
+    
+    // Движение в текущем направлении
+    if (player.direction) {
+        let moveX = 0;
+        let moveY = 0;
+        
+        if (player.direction === 'left') {
+            moveX = -player.speed * CELL_SIZE;
+        } else if (player.direction === 'right') {
+            moveX = player.speed * CELL_SIZE;
+        } else if (player.direction === 'up') {
+            moveY = -player.speed * CELL_SIZE;
+        } else if (player.direction === 'down') {
+            moveY = player.speed * CELL_SIZE;
+        }
+        
+        // Вычисляем новую позицию
+        const newPixelX = player.pixelX + moveX;
+        const newPixelY = player.pixelY + moveY;
+        const newGridX = Math.floor(newPixelX / CELL_SIZE);
+        const newGridY = Math.floor(newPixelY / CELL_SIZE);
+        
+        // Проверяем, можно ли двигаться в новую клетку
+        if (canMoveTo(newGridX, newGridY)) {
+            player.pixelX = newPixelX;
+            player.pixelY = newPixelY;
+            player.gridX = newGridX;
+            player.gridY = newGridY;
+        } else {
+            // Достигли стены, выравниваем позицию
+            const centerX = player.gridX * CELL_SIZE + CELL_SIZE / 2;
+            const centerY = player.gridY * CELL_SIZE + CELL_SIZE / 2;
+            player.pixelX = centerX;
+            player.pixelY = centerY;
+            player.direction = null;
         }
     }
     
     // Проверка коллизий с ловушками
-    if (checkTrapCollision(player.x, player.y, player.width, playerHeight, 
-                          player.isCrouching, player.isJumping)) {
+    if (checkTrapCollision(player.gridX, player.gridY, player.isCrouching, player.isJumping)) {
         gameOver('Пойман ловушкой!');
     }
     
-    // Ограничение границами
-    player.x = Math.max(0, Math.min(CANVAS_WIDTH - player.width, player.x));
-    player.y = Math.max(0, Math.min(CANVAS_HEIGHT - playerHeight, player.y));
+    // Обновляем координаты для отрисовки
+    player.x = player.pixelX - player.width / 2;
+    player.y = player.pixelY - player.height / 2;
 }
 
 // Обновление котика (AI преследования)
 function updateCat() {
-    const dx = player.x - cat.x;
-    const dy = player.y - cat.y;
-    const distance = Math.sqrt(dx * dx + dy * dy);
+    // Если котик в центре клетки, выбираем направление
+    const centerX = cat.gridX * CELL_SIZE + CELL_SIZE / 2;
+    const centerY = cat.gridY * CELL_SIZE + CELL_SIZE / 2;
+    const distToCenter = Math.abs(cat.pixelX - centerX) + Math.abs(cat.pixelY - centerY);
     
-    if (distance > 0) {
-        const moveX = (dx / distance) * cat.speed;
-        const moveY = (dy / distance) * cat.speed;
+    if (distToCenter < 3) {
+        cat.pixelX = centerX;
+        cat.pixelY = centerY;
         
-        // Пробуем двигаться по X
-        let newX = cat.x + moveX;
-        if (!checkWallCollision(newX, cat.y, cat.width, cat.height)) {
-            cat.x = newX;
+        // Обновляем grid позицию
+        cat.gridX = Math.floor(cat.pixelX / CELL_SIZE);
+        cat.gridY = Math.floor(cat.pixelY / CELL_SIZE);
+        
+        // Вычисляем направление к игроку
+        const dx = player.gridX - cat.gridX;
+        const dy = player.gridY - cat.gridY;
+        
+        // Пробуем двигаться в направлении игрока
+        const directions = [];
+        if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0) directions.push('right');
+            if (dx < 0) directions.push('left');
+            if (dy > 0) directions.push('down');
+            if (dy < 0) directions.push('up');
         } else {
-            // Если не можем двигаться по X, пробуем только по Y
-            if (Math.abs(dy) > Math.abs(dx)) {
-                const moveYOnly = (dy / Math.abs(dy)) * cat.speed;
-                let newY = cat.y + moveYOnly;
-                if (!checkWallCollision(cat.x, newY, cat.width, cat.height)) {
-                    cat.y = newY;
-                }
+            if (dy > 0) directions.push('down');
+            if (dy < 0) directions.push('up');
+            if (dx > 0) directions.push('right');
+            if (dx < 0) directions.push('left');
+        }
+        
+        // Пробуем каждое направление
+        for (let dir of directions) {
+            let newGridX = cat.gridX;
+            let newGridY = cat.gridY;
+            
+            if (dir === 'left') newGridX--;
+            if (dir === 'right') newGridX++;
+            if (dir === 'up') newGridY--;
+            if (dir === 'down') newGridY++;
+            
+            if (canMoveTo(newGridX, newGridY)) {
+                cat.direction = dir;
+                break;
             }
         }
         
-        // Пробуем двигаться по Y
-        let newY = cat.y + moveY;
-        if (!checkWallCollision(cat.x, newY, cat.width, cat.height)) {
-            cat.y = newY;
-        } else {
-            // Если не можем двигаться по Y, пробуем только по X
-            if (Math.abs(dx) > Math.abs(dy)) {
-                const moveXOnly = (dx / Math.abs(dx)) * cat.speed;
-                let newX = cat.x + moveXOnly;
-                if (!checkWallCollision(newX, cat.y, cat.width, cat.height)) {
-                    cat.x = newX;
+        // Если не можем двигаться к игроку, пробуем любое доступное направление
+        if (!cat.direction) {
+            const allDirections = ['up', 'down', 'left', 'right'];
+            for (let dir of allDirections) {
+                let newGridX = cat.gridX;
+                let newGridY = cat.gridY;
+                
+                if (dir === 'left') newGridX--;
+                if (dir === 'right') newGridX++;
+                if (dir === 'up') newGridY--;
+                if (dir === 'down') newGridY++;
+                
+                if (canMoveTo(newGridX, newGridY)) {
+                    cat.direction = dir;
+                    break;
                 }
             }
-        }
-        
-        // Проверка поймал ли котик игрока
-        if (distance < 25) {
-            gameOver('Котик поймал вас!');
         }
     }
+    
+    // Движение котика
+    if (cat.direction) {
+        let moveX = 0;
+        let moveY = 0;
+        
+        if (cat.direction === 'left') {
+            moveX = -cat.speed * CELL_SIZE;
+        } else if (cat.direction === 'right') {
+            moveX = cat.speed * CELL_SIZE;
+        } else if (cat.direction === 'up') {
+            moveY = -cat.speed * CELL_SIZE;
+        } else if (cat.direction === 'down') {
+            moveY = cat.speed * CELL_SIZE;
+        }
+        
+        const newPixelX = cat.pixelX + moveX;
+        const newPixelY = cat.pixelY + moveY;
+        const newGridX = Math.floor(newPixelX / CELL_SIZE);
+        const newGridY = Math.floor(newPixelY / CELL_SIZE);
+        
+        if (canMoveTo(newGridX, newGridY)) {
+            cat.pixelX = newPixelX;
+            cat.pixelY = newPixelY;
+            cat.gridX = newGridX;
+            cat.gridY = newGridY;
+        } else {
+            const centerX = cat.gridX * CELL_SIZE + CELL_SIZE / 2;
+            const centerY = cat.gridY * CELL_SIZE + CELL_SIZE / 2;
+            cat.pixelX = centerX;
+            cat.pixelY = centerY;
+            cat.direction = null;
+        }
+    }
+    
+    // Проверка поймал ли котик игрока
+    const distance = Math.sqrt(
+        Math.pow(player.gridX - cat.gridX, 2) + Math.pow(player.gridY - cat.gridY, 2)
+    );
+    if (distance < 1.5) {
+        gameOver('Котик поймал вас!');
+    }
+    
+    // Обновляем координаты для отрисовки
+    cat.x = cat.pixelX - cat.width / 2;
+    cat.y = cat.pixelY - cat.height / 2;
 }
 
 // Отрисовка лабиринта
 function drawMaze() {
+    // Сначала отрисовываем проходы (пол)
     ctx.fillStyle = '#2a2a2a';
     for (let y = 0; y < MAZE_ROWS; y++) {
         for (let x = 0; x < MAZE_COLS; x++) {
-            if (maze[y][x] === 0) {
+            if (maze[y][x] === 1) {
                 ctx.fillRect(x * CELL_SIZE, y * CELL_SIZE, CELL_SIZE, CELL_SIZE);
+            }
+        }
+    }
+    
+    // Затем отрисовываем стены с контуром
+    for (let y = 0; y < MAZE_ROWS; y++) {
+        for (let x = 0; x < MAZE_COLS; x++) {
+            if (maze[y][x] === 0) {
+                const wallX = x * CELL_SIZE;
+                const wallY = y * CELL_SIZE;
+                
+                // Основной цвет стены (светло-серый)
+                ctx.fillStyle = '#555555';
+                ctx.fillRect(wallX, wallY, CELL_SIZE, CELL_SIZE);
+                
+                // Контур стены для лучшей видимости
+                ctx.strokeStyle = '#777777';
+                ctx.lineWidth = 2;
+                ctx.strokeRect(wallX + 1, wallY + 1, CELL_SIZE - 2, CELL_SIZE - 2);
+                
+                // Внутренняя тень для объема
+                ctx.fillStyle = '#444444';
+                ctx.fillRect(wallX + 2, wallY + 2, CELL_SIZE - 4, CELL_SIZE - 4);
             }
         }
     }
@@ -404,7 +548,7 @@ function drawCat() {
 
 // Отрисовка игры
 function draw() {
-    // Очистка
+    // Очистка (темный фон)
     ctx.fillStyle = '#1a1a1a';
     ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
     
@@ -502,16 +646,30 @@ function startGame() {
     generateMaze();
     generateTraps();
     
-    // Позиции персонажей
-    player.x = 50;
-    player.y = 50;
-    player.velocityY = 0;
-    player.onGround = false;
+    // Позиции персонажей в сетке
+    player.gridX = 2;
+    player.gridY = 2;
+    const playerPos = gridToPixel(player.gridX, player.gridY);
+    player.pixelX = playerPos.x;
+    player.pixelY = playerPos.y;
+    player.x = player.pixelX - player.width / 2;
+    player.y = player.pixelY - player.height / 2;
+    player.direction = null;
+    player.nextDirection = null;
     player.isJumping = false;
     player.isCrouching = false;
+    player.jumpTimer = 0;
+    player.crouchTimer = 0;
     
-    cat.x = CANVAS_WIDTH - 100;
-    cat.y = CANVAS_HEIGHT - 100;
+    cat.gridX = MAZE_COLS - 3;
+    cat.gridY = MAZE_ROWS - 3;
+    const catPos = gridToPixel(cat.gridX, cat.gridY);
+    cat.pixelX = catPos.x;
+    cat.pixelY = catPos.y;
+    cat.x = cat.pixelX - cat.width / 2;
+    cat.y = cat.pixelY - cat.height / 2;
+    cat.direction = null;
+    cat.nextDirection = null;
     
     document.getElementById('gameOverlay').style.display = 'none';
 }
@@ -538,4 +696,18 @@ document.getElementById('restartButton').addEventListener('click', () => {
 // Инициализация
 generateMaze();
 generateTraps();
+
+// Устанавливаем начальные позиции
+const playerPos = gridToPixel(2, 2);
+player.pixelX = playerPos.x;
+player.pixelY = playerPos.y;
+player.x = player.pixelX - player.width / 2;
+player.y = player.pixelY - player.height / 2;
+
+const catPos = gridToPixel(MAZE_COLS - 3, MAZE_ROWS - 3);
+cat.pixelX = catPos.x;
+cat.pixelY = catPos.y;
+cat.x = cat.pixelX - cat.width / 2;
+cat.y = cat.pixelY - cat.height / 2;
+
 gameLoop();
