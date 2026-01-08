@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Редактор уровней - Котик и Человек</title>
+    <link rel="stylesheet" href="style.css">
+    <style>
+        .editor-container {
+            max-width: 1200px;
+        }
+        .editor-tools {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+            align-items: center;
+        }
+        .tool-button {
+            padding: 10px 20px;
+            background: #667eea;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 14px;
+        }
+        .tool-button.active {
+            background: #764ba2;
+        }
+        .tool-button:hover {
+            background: #5568d3;
+        }
+        .editor-info {
+            background: #f0f0f0;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 20px;
+        }
+        .editor-info h3 {
+            margin-top: 0;
+        }
+        .file-input-wrapper {
+            position: relative;
+            display: inline-block;
+        }
+        .file-input-wrapper input[type="file"] {
+            position: absolute;
+            opacity: 0;
+            width: 100%;
+            height: 100%;
+            cursor: pointer;
+        }
+        #levelNameInput {
+            padding: 8px;
+            border: 2px solid #667eea;
+            border-radius: 5px;
+            font-size: 14px;
+            width: 200px;
+        }
+    </style>
+</head>
+<body>
+    <div class="game-container editor-container">
+        <div class="game-header">
+            <h1>📝 Редактор уровней</h1>
+            <div class="editor-info">
+                <h3>Инструкция:</h3>
+                <p><strong>ЛКМ</strong> - поставить/убрать стену | <strong>ПКМ</strong> - поставить/убрать ловушку</p>
+                <p><strong>Красные ловушки</strong> - низкие (нужно присесть) | <strong>Зеленые ловушки</strong> - высокие (нужно прыгнуть)</p>
+            </div>
+            <div class="editor-tools">
+                <button class="tool-button active" id="wallTool">Стена</button>
+                <button class="tool-button" id="trapLowTool">Ловушка (низкая)</button>
+                <button class="tool-button" id="trapHighTool">Ловушка (высокая)</button>
+                <button class="tool-button" id="clearTool">Очистить</button>
+                <button class="tool-button" id="generateTool">Сгенерировать</button>
+                <input type="text" id="levelNameInput" placeholder="Название уровня">
+                <button class="tool-button" id="saveButton">💾 Сохранить</button>
+                <div class="file-input-wrapper">
+                    <button class="tool-button">📂 Загрузить</button>
+                    <input type="file" id="loadFileInput" accept=".json">
+                </div>
+                <button class="tool-button" id="testButton">▶ Тест</button>
+                <button class="tool-button" id="backButton">← Назад</button>
+            </div>
+        </div>
+        <canvas id="editorCanvas"></canvas>
+    </div>
+    <script src="editor.js"></script>
+</body>
+</html>

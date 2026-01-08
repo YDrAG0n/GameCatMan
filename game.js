@@ -57,6 +57,9 @@ let traps = [];
 // Клавиши
 const keys = {};
 
+// Текущий загруженный уровень
+let currentLevel = null;
+
 // Генерация лабиринта (упрощенный алгоритм)
 function generateMaze() {
     maze = [];
@@ -637,14 +640,32 @@ canvas.addEventListener('click', () => {
 canvas.setAttribute('tabindex', '0');
 canvas.style.outline = 'none';
 
+// Загрузка уровня из данных
+function loadLevelData(levelData) {
+    if (levelData.maze) {
+        maze = levelData.maze;
+    }
+    if (levelData.traps) {
+        traps = levelData.traps;
+    } else {
+        traps = [];
+    }
+    currentLevel = levelData;
+}
+
 // Начало игры
-function startGame() {
+function startGame(levelData = null) {
     gameState = 'playing';
     gameTime = 0;
     startTime = Date.now();
     
-    generateMaze();
-    generateTraps();
+    if (levelData) {
+        loadLevelData(levelData);
+    } else {
+        generateMaze();
+        generateTraps();
+        currentLevel = null;
+    }
     
     // Позиции персонажей в сетке
     player.gridX = 2;
@@ -672,6 +693,8 @@ function startGame() {
     cat.nextDirection = null;
     
     document.getElementById('gameOverlay').style.display = 'none';
+    document.getElementById('levelSelectMenu').style.display = 'none';
+    document.getElementById('mainMenu').style.display = 'block';
 }
 
 // Конец игры
@@ -685,12 +708,149 @@ function gameOver(message) {
     document.getElementById('gameOverlay').style.display = 'flex';
 }
 
+// Получить список сохраненных уровней
+function getSavedLevels() {
+    const levels = [];
+    for (let i = 0; i < localStorage.length; i++) {
+        const key = localStorage.key(i);
+        if (key.startsWith('level_')) {
+            try {
+                const levelData = JSON.parse(localStorage.getItem(key));
+                levels.push({
+                    key: key,
+                    name: levelData.name || key,
+                    data: levelData
+                });
+            } catch (e) {
+                // Игнорируем некорректные данные
+            }
+        }
+    }
+    return levels;
+}
+
+// Сохранить уровень в localStorage
+function saveLevelToStorage(levelData) {
+    const key = 'level_' + (levelData.name || Date.now());
+    localStorage.setItem(key, JSON.stringify(levelData));
+    return key;
+}
+
+// Загрузить уровень из localStorage
+function loadLevelFromStorage(key) {
+    const data = localStorage.getItem(key);
+    if (data) {
+        return JSON.parse(data);
+    }
+    return null;
+}
+
+// Удалить уровень из localStorage
+function deleteLevelFromStorage(key) {
+    localStorage.removeItem(key);
+}
+
+// Показать меню выбора уровня
+function showLevelSelect() {
+    const menu = document.getElementById('levelSelectMenu');
+    const mainMenu = document.getElementById('mainMenu');
+    const levelList = document.getElementById('levelList');
+    
+    menu.style.display = 'block';
+    mainMenu.style.display = 'none';
+    
+    // Очищаем список
+    levelList.innerHTML = '';
+    
+    // Добавляем опцию "Случайный уровень"
+    const randomOption = document.createElement('div');
+    randomOption.className = 'level-item';
+    randomOption.style.cssText = 'padding: 10px; margin: 5px; background: #f0f0f0; border-radius: 5px; cursor: pointer;';
+    randomOption.innerHTML = '<strong>🎲 Случайный уровень</strong>';
+    randomOption.addEventListener('click', () => {
+        startGame();
+    });
+    levelList.appendChild(randomOption);
+    
+    // Загружаем сохраненные уровни
+    const levels = getSavedLevels();
+    if (levels.length === 0) {
+        const noLevels = document.createElement('div');
+        noLevels.style.cssText = 'padding: 10px; color: #666;';
+        noLevels.textContent = 'Нет сохраненных уровней. Создайте уровень в редакторе!';
+        levelList.appendChild(noLevels);
+    } else {
+        levels.forEach(level => {
+            const levelItem = document.createElement('div');
+            levelItem.className = 'level-item';
+            levelItem.style.cssText = 'padding: 10px; margin: 5px; background: #f0f0f0; border-radius: 5px; cursor: pointer; display: flex; justify-content: space-between; align-items: center;';
+            
+            const levelName = document.createElement('span');
+            levelName.textContent = '📁 ' + level.name;
+            levelName.style.flex = '1';
+            
+            const deleteBtn = document.createElement('button');
+            deleteBtn.textContent = '🗑️';
+            deleteBtn.style.cssText = 'background: #ff4444; color: white; border: none; border-radius: 3px; padding: 5px 10px; cursor: pointer; margin-left: 10px;';
+            deleteBtn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (confirm('Удалить уровень "' + level.name + '"?')) {
+                    deleteLevelFromStorage(level.key);
+                    showLevelSelect(); // Обновляем список
+                }
+            });
+            
+            levelItem.appendChild(levelName);
+            levelItem.appendChild(deleteBtn);
+            
+            levelItem.addEventListener('click', () => {
+                startGame(level.data);
+            });
+            
+            levelList.appendChild(levelItem);
+        });
+    }
+    
+    // Кнопка загрузки из файла
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.accept = '.json';
+    fileInput.style.display = 'none';
+    fileInput.addEventListener('change', (e) => {
+        if (e.target.files.length > 0) {
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                try {
+                    const levelData = JSON.parse(event.target.result);
+                    startGame(levelData);
+                } catch (error) {
+                    alert('Ошибка загрузки уровня: ' + error.message);
+                }
+            };
+            reader.readAsText(e.target.files[0]);
+        }
+    });
+    
+    const loadFileBtn = document.getElementById('loadLevelButton');
+    loadFileBtn.style.display = 'block';
+    loadFileBtn.onclick = () => fileInput.click();
+    document.body.appendChild(fileInput);
+}
+
 // Обработчики кнопок
-document.getElementById('startButton').addEventListener('click', startGame);
+document.getElementById('startButton').addEventListener('click', () => startGame());
+document.getElementById('selectLevelButton').addEventListener('click', showLevelSelect);
+document.getElementById('editorButton').addEventListener('click', () => {
+    window.location.href = 'editor.html';
+});
+document.getElementById('cancelLevelSelect').addEventListener('click', () => {
+    document.getElementById('levelSelectMenu').style.display = 'none';
+    document.getElementById('mainMenu').style.display = 'block';
+});
 document.getElementById('restartButton').addEventListener('click', () => {
     document.getElementById('restartButton').style.display = 'none';
     document.getElementById('startButton').style.display = 'block';
-    startGame();
+    startGame(currentLevel);
 });
 
 // Инициализация
@@ -709,5 +869,20 @@ cat.pixelX = catPos.x;
 cat.pixelY = catPos.y;
 cat.x = cat.pixelX - cat.width / 2;
 cat.y = cat.pixelY - cat.height / 2;
+
+// Проверяем, есть ли тестовый уровень из редактора
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('test') === 'true') {
+    const testLevel = localStorage.getItem('testLevel');
+    if (testLevel) {
+        try {
+            const levelData = JSON.parse(testLevel);
+            startGame(levelData);
+            localStorage.removeItem('testLevel'); // Удаляем после загрузки
+        } catch (e) {
+            console.error('Ошибка загрузки тестового уровня:', e);
+        }
+    }
+}
 
 gameLoop();

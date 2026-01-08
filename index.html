@@ -23,8 +23,18 @@
             <div class="overlay-content">
                 <h2 id="overlayTitle">Готовы начать?</h2>
                 <p id="overlayText">Избегайте ловушек и не дайте котику поймать вас!</p>
-                <button id="startButton">Начать игру</button>
-                <button id="restartButton" style="display: none;">Играть снова</button>
+                <div id="levelSelectMenu" style="display: none;">
+                    <h3>Выберите уровень:</h3>
+                    <div id="levelList"></div>
+                    <button id="loadLevelButton" style="display: none;">Загрузить уровень</button>
+                    <button id="cancelLevelSelect">Отмена</button>
+                </div>
+                <div id="mainMenu">
+                    <button id="startButton">Начать игру</button>
+                    <button id="selectLevelButton">Выбрать уровень</button>
+                    <button id="editorButton">Редактор уровней</button>
+                    <button id="restartButton" style="display: none;">Играть снова</button>
+                </div>
             </div>
         </div>
     </div>
