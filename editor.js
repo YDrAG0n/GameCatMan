@@ -115,10 +115,10 @@ function handleMouseAction(e, isRightClick = false) {
     } else {
         // ЛКМ - работа со стенами
         if (currentTool === 'wall') {
-            // Переключаем стену/проход (но не на границах)
+            // Ставим стену (но не на границах)
             if (cell.col > 0 && cell.col < MAZE_COLS - 1 && 
                 cell.row > 0 && cell.row < MAZE_ROWS - 1) {
-                maze[cell.row][cell.col] = maze[cell.row][cell.col] === 0 ? 1 : 0;
+                maze[cell.row][cell.col] = 0;
             }
         } else if (currentTool === 'clear') {
             // Очищаем клетку
