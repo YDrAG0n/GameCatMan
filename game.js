@@ -54,6 +54,11 @@ let cat = {
 // Ловушки
 let traps = [];
 
+// Алмазы
+let diamonds = [];
+let collectedDiamonds = 0;
+let totalDiamonds = 0;
+
 // Клавиши
 const keys = {};
 
@@ -121,6 +126,71 @@ function generateMaze() {
         for (let x = MAZE_COLS - 4; x <= MAZE_COLS - 2; x++) {
             maze[y][x] = 1;
         }
+    }
+}
+
+// Генерация алмазов в случайных пустых местах
+function generateDiamonds(count) {
+    // Собираем список всех пустых клеток
+    const emptyCells = [];
+    
+    for (let y = 1; y < MAZE_ROWS - 1; y++) {
+        for (let x = 1; x < MAZE_COLS - 1; x++) {
+            // Проверяем, что клетка проходима
+            if (!canMoveTo(x, y)) continue;
+            
+            // Проверяем, что это не стартовая позиция игрока
+            if (x === player.gridX && y === player.gridY) continue;
+            
+            // Проверяем, что это не стартовая позиция котика
+            if (x === cat.gridX && y === cat.gridY) continue;
+            
+            // Проверяем, что здесь нет ловушки
+            let hasTrap = false;
+            for (let trap of traps) {
+                const trapGridX = Math.floor(trap.x / CELL_SIZE);
+                const trapGridY = Math.floor(trap.y / CELL_SIZE);
+                if (trapGridX === x && trapGridY === y) {
+                    hasTrap = true;
+                    break;
+                }
+            }
+            if (hasTrap) continue;
+            
+            // Проверяем, что здесь уже нет алмаза
+            let hasDiamond = false;
+            for (let diamond of diamonds) {
+                const diamondGridX = Math.floor(diamond.x / CELL_SIZE);
+                const diamondGridY = Math.floor(diamond.y / CELL_SIZE);
+                if (diamondGridX === x && diamondGridY === y) {
+                    hasDiamond = true;
+                    break;
+                }
+            }
+            if (hasDiamond) continue;
+            
+            emptyCells.push({ x, y });
+        }
+    }
+    
+    // Перемешиваем массив случайным образом
+    for (let i = emptyCells.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [emptyCells[i], emptyCells[j]] = [emptyCells[j], emptyCells[i]];
+    }
+    
+    // Берем первые count клеток (или сколько есть, если меньше)
+    const cellsToUse = emptyCells.slice(0, Math.min(count, emptyCells.length));
+    
+    // Создаем алмазы
+    for (let cell of cellsToUse) {
+        diamonds.push({
+            x: cell.x * CELL_SIZE,
+            y: cell.y * CELL_SIZE,
+            width: CELL_SIZE * 0.6,
+            height: CELL_SIZE * 0.6,
+            collected: false
+        });
     }
 }
 
@@ -305,9 +375,34 @@ function updatePlayer() {
         gameOver('Пойман ловушкой!');
     }
     
+    // Проверка сбора алмазов
+    checkDiamondCollection();
+    
+    // Проверка победы (собраны все алмазы, если они есть)
+    if (totalDiamonds > 0 && collectedDiamonds >= totalDiamonds) {
+        gameWin();
+        return; // Останавливаем обновление после победы
+    }
+    
     // Обновляем координаты для отрисовки
     player.x = player.pixelX - player.width / 2;
     player.y = player.pixelY - player.height / 2;
+}
+
+// Проверка сбора алмазов
+function checkDiamondCollection() {
+    for (let i = diamonds.length - 1; i >= 0; i--) {
+        const diamond = diamonds[i];
+        if (!diamond.collected) {
+            const diamondGridX = Math.floor(diamond.x / CELL_SIZE);
+            const diamondGridY = Math.floor(diamond.y / CELL_SIZE);
+            
+            if (player.gridX === diamondGridX && player.gridY === diamondGridY) {
+                diamond.collected = true;
+                collectedDiamonds++;
+            }
+        }
+    }
 }
 
 // Волновой алгоритм (BFS) для поиска кратчайшего пути
@@ -566,6 +661,47 @@ function drawTraps() {
     }
 }
 
+// Отрисовка алмазов
+function drawDiamonds() {
+    for (let diamond of diamonds) {
+        if (diamond.collected) continue;
+        
+        // Алмазы сохраняются с координатами x, y (левый верхний угол клетки)
+        // Нужно вычислить центр клетки
+        let centerX, centerY;
+        if (diamond.x !== undefined && diamond.y !== undefined) {
+            // diamond.x и diamond.y - это координаты левого верхнего угла клетки
+            // Центр клетки = координата угла + половина размера клетки
+            centerX = diamond.x + CELL_SIZE / 2;
+            centerY = diamond.y + CELL_SIZE / 2;
+        } else {
+            continue; // Пропускаем алмазы без координат
+        }
+        
+        const size = diamond.width || CELL_SIZE * 0.6;
+        
+        // Рисуем алмаз (ромб)
+        ctx.fillStyle = '#00BFFF';
+        ctx.strokeStyle = '#0080FF';
+        ctx.lineWidth = 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY - size / 2); // Верх
+        ctx.lineTo(centerX + size / 2, centerY); // Право
+        ctx.lineTo(centerX, centerY + size / 2); // Низ
+        ctx.lineTo(centerX - size / 2, centerY); // Лево
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Блеск
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(centerX - 3, centerY - 3, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
 // Отрисовка игрока
 function drawPlayer() {
     const height = player.isCrouching ? player.height / 2 : player.height;
@@ -724,6 +860,7 @@ function draw() {
     // Отрисовка элементов (порядок важен!)
     drawMaze();
     drawTraps();
+    drawDiamonds(); // Рисуем алмазы
     drawCatPath(); // Рисуем путь преследования
     drawPlayer();
     drawCat();
@@ -770,6 +907,9 @@ function update() {
             Math.pow(player.x - 50, 2) + Math.pow(player.y - 50, 2)
         );
         document.getElementById('distance').textContent = Math.floor(distance / 10);
+        
+        // Обновление счетчика алмазов
+        document.getElementById('diamonds').textContent = collectedDiamonds;
     }
     
     // Всегда перерисовываем, чтобы видеть лабиринт даже в меню
@@ -817,6 +957,11 @@ function loadLevelData(levelData) {
     } else {
         traps = [];
     }
+    if (levelData.diamonds) {
+        diamonds = levelData.diamonds.map(d => ({ ...d, collected: false }));
+    } else {
+        diamonds = [];
+    }
     currentLevel = levelData;
 }
 
@@ -831,6 +976,7 @@ function startGame(levelData = null) {
     } else {
         generateMaze();
         generateTraps();
+        diamonds = [];
         currentLevel = null;
     }
     
@@ -859,6 +1005,17 @@ function startGame(levelData = null) {
     cat.direction = null;
     cat.nextDirection = null;
     
+    // Генерируем алмазы, если их нет или меньше 30
+    if (diamonds.length < 30) {
+        generateDiamonds(30 - diamonds.length);
+    }
+    
+    // Инициализация счетчиков алмазов
+    collectedDiamonds = 0;
+    totalDiamonds = diamonds.length;
+    document.getElementById('diamonds').textContent = collectedDiamonds;
+    document.getElementById('totalDiamonds').textContent = totalDiamonds;
+    
     document.getElementById('gameOverlay').style.display = 'none';
     document.getElementById('levelSelectMenu').style.display = 'none';
     document.getElementById('mainMenu').style.display = 'block';
@@ -870,6 +1027,17 @@ function gameOver(message) {
     document.getElementById('overlayTitle').textContent = 'Игра окончена!';
     document.getElementById('overlayText').textContent = message + 
         `\nВы продержались ${gameTime} секунд!`;
+    document.getElementById('startButton').style.display = 'none';
+    document.getElementById('restartButton').style.display = 'block';
+    document.getElementById('gameOverlay').style.display = 'flex';
+}
+
+// Победа в игре
+function gameWin() {
+    gameState = 'gameOver';
+    document.getElementById('overlayTitle').textContent = '🎉 Победа! 🎉';
+    document.getElementById('overlayText').textContent = 
+        `Вы собрали все алмазы!\nВремя: ${gameTime} секунд`;
     document.getElementById('startButton').style.display = 'none';
     document.getElementById('restartButton').style.display = 'block';
     document.getElementById('gameOverlay').style.display = 'flex';

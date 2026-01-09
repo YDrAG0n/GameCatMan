@@ -12,9 +12,10 @@ canvas.width = CANVAS_WIDTH;
 canvas.height = CANVAS_HEIGHT;
 
 // Состояние редактора
-let currentTool = 'wall'; // 'wall', 'trapLow', 'trapHigh', 'clear'
+let currentTool = 'wall'; // 'wall', 'trapLow', 'trapHigh', 'clear', 'diamond'
 let maze = [];
 let traps = [];
+let diamonds = [];
 let mouseX = 0;
 let mouseY = 0;
 let isMouseDown = false;
@@ -80,36 +81,59 @@ function handleMouseAction(e, isRightClick = false) {
         return;
     }
     
-    // ПКМ - работа с ловушками
+    // ПКМ - работа с ловушками и алмазами
     if (isRightClick || e.button === 2) {
-        const trapIndex = traps.findIndex(t => 
-            Math.floor(t.x / CELL_SIZE) === cell.col && 
-            Math.floor(t.y / CELL_SIZE) === cell.row
-        );
-        
-        if (trapIndex !== -1) {
-            // Удаляем ловушку
-            traps.splice(trapIndex, 1);
-        } else if (maze[cell.row][cell.col] === 1) {
-            // Добавляем ловушку в зависимости от текущего инструмента
-            if (currentTool === 'trapLow') {
-                traps.push({
+        if (currentTool === 'diamond') {
+            // Работа с алмазами
+            const diamondIndex = diamonds.findIndex(d => 
+                Math.floor(d.x / CELL_SIZE) === cell.col && 
+                Math.floor(d.y / CELL_SIZE) === cell.row
+            );
+            
+            if (diamondIndex !== -1) {
+                // Удаляем алмаз
+                diamonds.splice(diamondIndex, 1);
+            } else if (maze[cell.row][cell.col] === 1) {
+                // Добавляем алмаз
+                diamonds.push({
                     x: cell.col * CELL_SIZE,
                     y: cell.row * CELL_SIZE,
-                    width: CELL_SIZE,
-                    height: CELL_SIZE / 2,
-                    type: 'low',
-                    active: true
+                    width: CELL_SIZE * 0.6,
+                    height: CELL_SIZE * 0.6,
+                    collected: false
                 });
-            } else if (currentTool === 'trapHigh') {
-                traps.push({
-                    x: cell.col * CELL_SIZE,
-                    y: cell.row * CELL_SIZE,
-                    width: CELL_SIZE,
-                    height: CELL_SIZE,
-                    type: 'high',
-                    active: true
-                });
+            }
+        } else {
+            // Работа с ловушками
+            const trapIndex = traps.findIndex(t => 
+                Math.floor(t.x / CELL_SIZE) === cell.col && 
+                Math.floor(t.y / CELL_SIZE) === cell.row
+            );
+            
+            if (trapIndex !== -1) {
+                // Удаляем ловушку
+                traps.splice(trapIndex, 1);
+            } else if (maze[cell.row][cell.col] === 1) {
+                // Добавляем ловушку в зависимости от текущего инструмента
+                if (currentTool === 'trapLow') {
+                    traps.push({
+                        x: cell.col * CELL_SIZE,
+                        y: cell.row * CELL_SIZE,
+                        width: CELL_SIZE,
+                        height: CELL_SIZE / 2,
+                        type: 'low',
+                        active: true
+                    });
+                } else if (currentTool === 'trapHigh') {
+                    traps.push({
+                        x: cell.col * CELL_SIZE,
+                        y: cell.row * CELL_SIZE,
+                        width: CELL_SIZE,
+                        height: CELL_SIZE,
+                        type: 'high',
+                        active: true
+                    });
+                }
             }
         }
     } else {
@@ -130,6 +154,21 @@ function handleMouseAction(e, isRightClick = false) {
                     Math.floor(t.x / CELL_SIZE) !== cell.col || 
                     Math.floor(t.y / CELL_SIZE) !== cell.row
                 );
+                // Удаляем алмазы в этой клетке
+                diamonds = diamonds.filter(d => 
+                    Math.floor(d.x / CELL_SIZE) !== cell.col || 
+                    Math.floor(d.y / CELL_SIZE) !== cell.row
+                );
+            }
+        } else if (currentTool === 'diamond') {
+            // ЛКМ на алмаз - удаляем его
+            const diamondIndex = diamonds.findIndex(d => 
+                Math.floor(d.x / CELL_SIZE) === cell.col && 
+                Math.floor(d.y / CELL_SIZE) === cell.row
+            );
+            
+            if (diamondIndex !== -1) {
+                diamonds.splice(diamondIndex, 1);
             }
         }
     }
@@ -183,6 +222,34 @@ function drawTraps() {
     }
 }
 
+// Отрисовка алмазов
+function drawDiamonds() {
+    for (let diamond of diamonds) {
+        const centerX = diamond.x + CELL_SIZE / 2;
+        const centerY = diamond.y + CELL_SIZE / 2;
+        
+        // Рисуем алмаз (ромб)
+        ctx.fillStyle = '#00BFFF';
+        ctx.strokeStyle = '#0080FF';
+        ctx.lineWidth = 2;
+        
+        ctx.beginPath();
+        ctx.moveTo(centerX, centerY - diamond.height / 2); // Верх
+        ctx.lineTo(centerX + diamond.width / 2, centerY); // Право
+        ctx.lineTo(centerX, centerY + diamond.height / 2); // Низ
+        ctx.lineTo(centerX - diamond.width / 2, centerY); // Лево
+        ctx.closePath();
+        ctx.fill();
+        ctx.stroke();
+        
+        // Блеск
+        ctx.fillStyle = '#FFFFFF';
+        ctx.beginPath();
+        ctx.arc(centerX - 3, centerY - 3, 2, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
 // Отрисовка сетки и курсора
 function drawGrid() {
     const cell = getCellFromPixel(mouseX, mouseY);
@@ -205,6 +272,19 @@ function drawGrid() {
         } else if (currentTool === 'trapHigh') {
             ctx.fillStyle = 'rgba(68, 255, 68, 0.5)';
             ctx.fillRect(x, y, CELL_SIZE, CELL_SIZE);
+        } else if (currentTool === 'diamond') {
+            const centerX = x + CELL_SIZE / 2;
+            const centerY = y + CELL_SIZE / 2;
+            const size = CELL_SIZE * 0.6;
+            
+            ctx.fillStyle = 'rgba(0, 191, 255, 0.5)';
+            ctx.beginPath();
+            ctx.moveTo(centerX, centerY - size / 2);
+            ctx.lineTo(centerX + size / 2, centerY);
+            ctx.lineTo(centerX, centerY + size / 2);
+            ctx.lineTo(centerX - size / 2, centerY);
+            ctx.closePath();
+            ctx.fill();
         }
     }
 }
@@ -216,6 +296,7 @@ function draw() {
     
     drawMaze();
     drawTraps();
+    drawDiamonds();
     drawGrid();
 }
 
@@ -227,6 +308,7 @@ function saveLevel() {
         name: levelName,
         maze: maze,
         traps: traps,
+        diamonds: diamonds,
         width: CANVAS_WIDTH,
         height: CANVAS_HEIGHT,
         cellSize: CELL_SIZE,
@@ -258,6 +340,7 @@ function loadLevel(file) {
             const levelData = JSON.parse(e.target.result);
             maze = levelData.maze;
             traps = levelData.traps || [];
+            diamonds = levelData.diamonds || [];
             document.getElementById('levelNameInput').value = levelData.name || '';
             draw();
             alert('Уровень загружен: ' + levelData.name);
@@ -309,6 +392,7 @@ function generateMaze() {
     }
     
     traps = [];
+    diamonds = [];
     draw();
 }
 
@@ -325,6 +409,11 @@ document.getElementById('trapLowTool').addEventListener('click', () => {
 
 document.getElementById('trapHighTool').addEventListener('click', () => {
     currentTool = 'trapHigh';
+    updateToolButtons();
+});
+
+document.getElementById('diamondTool').addEventListener('click', () => {
+    currentTool = 'diamond';
     updateToolButtons();
 });
 
@@ -350,6 +439,7 @@ document.getElementById('testButton').addEventListener('click', () => {
         name: levelName,
         maze: maze,
         traps: traps,
+        diamonds: diamonds,
         width: CANVAS_WIDTH,
         height: CANVAS_HEIGHT,
         cellSize: CELL_SIZE,
@@ -374,6 +464,8 @@ function updateToolButtons() {
         document.getElementById('trapLowTool').classList.add('active');
     } else if (currentTool === 'trapHigh') {
         document.getElementById('trapHighTool').classList.add('active');
+    } else if (currentTool === 'diamond') {
+        document.getElementById('diamondTool').classList.add('active');
     } else if (currentTool === 'clear') {
         document.getElementById('clearTool').classList.add('active');
     }
