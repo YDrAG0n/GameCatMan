@@ -121,6 +121,14 @@ function handleMouseAction(e, isRightClick = false) {
             if (cell.col > 0 && cell.col < MAZE_COLS - 1 && 
                 cell.row > 0 && cell.row < MAZE_ROWS - 1) {
                 maze[cell.row][cell.col] = 0;
+                // Удаляем алмаз из этой клетки, если он там есть
+                const diamondIndex = diamonds.findIndex(d => 
+                    Math.floor(d.x / CELL_SIZE) === cell.col && 
+                    Math.floor(d.y / CELL_SIZE) === cell.row
+                );
+                if (diamondIndex !== -1) {
+                    diamonds.splice(diamondIndex, 1);
+                }
             }
         } else if (currentTool === 'diamond') {
             // Работа с алмазами (set - всегда ставим, как стены)
