@@ -60,6 +60,11 @@ const keys = {};
 // Текущий загруженный уровень
 let currentLevel = null;
 
+// Путь преследования котика (для визуализации)
+let catPath = [];
+let lastPathRecalculation = 0;
+const PATH_RECALCULATION_INTERVAL = 30; // Пересчитываем путь каждые 30 кадров (~0.5 сек при 60 FPS)
+
 // Генерация лабиринта (упрощенный алгоритм)
 function generateMaze() {
     maze = [];
@@ -305,77 +310,109 @@ function updatePlayer() {
     player.y = player.pixelY - player.height / 2;
 }
 
-// Поиск пути к игроку (упрощенный алгоритм с обходом препятствий)
+// Волновой алгоритм (BFS) для поиска кратчайшего пути
 function findPathToPlayer(catGridX, catGridY, playerGridX, playerGridY) {
-    // Простой алгоритм: пробуем найти направление, которое приближает к цели
-    // и обходит препятствия через соседние клетки
+    // Инициализация пути
+    catPath = [];
     
-    const dx = playerGridX - catGridX;
-    const dy = playerGridY - catGridY;
-    
-    // Приоритетные направления (к игроку)
-    const preferredDirections = [];
-    if (Math.abs(dx) > Math.abs(dy)) {
-        if (dx > 0) preferredDirections.push('right');
-        if (dx < 0) preferredDirections.push('left');
-        if (dy > 0) preferredDirections.push('down');
-        if (dy < 0) preferredDirections.push('up');
-    } else {
-        if (dy > 0) preferredDirections.push('down');
-        if (dy < 0) preferredDirections.push('up');
-        if (dx > 0) preferredDirections.push('right');
-        if (dx < 0) preferredDirections.push('left');
+    // Если котик уже на позиции игрока
+    if (catGridX === playerGridX && catGridY === playerGridY) {
+        catPath.push({ x: catGridX, y: catGridY });
+        return null;
     }
     
-    // Пробуем прямое направление
-    for (let dir of preferredDirections) {
-        let newGridX = catGridX;
-        let newGridY = catGridY;
-        
-        if (dir === 'left') newGridX--;
-        if (dir === 'right') newGridX++;
-        if (dir === 'up') newGridY--;
-        if (dir === 'down') newGridY++;
-        
-        if (canMoveTo(newGridX, newGridY)) {
-            return dir;
+    // Создаем матрицу расстояний
+    const distances = [];
+    for (let y = 0; y < MAZE_ROWS; y++) {
+        distances[y] = [];
+        for (let x = 0; x < MAZE_COLS; x++) {
+            distances[y][x] = -1; // -1 означает непосещенную клетку
         }
     }
     
-    // Если прямой путь заблокирован, пробуем обходные пути
-    // Проверяем соседние клетки и выбираем ту, которая ближе к цели
-    const neighbors = [
-        { dir: 'up', x: catGridX, y: catGridY - 1 },
-        { dir: 'down', x: catGridX, y: catGridY + 1 },
-        { dir: 'left', x: catGridX - 1, y: catGridY },
-        { dir: 'right', x: catGridX + 1, y: catGridY }
+    // Очередь для BFS
+    const queue = [];
+    queue.push({ x: catGridX, y: catGridY });
+    distances[catGridY][catGridX] = 0;
+    
+    // Матрица для восстановления пути (хранит предыдущую клетку)
+    const prev = [];
+    for (let y = 0; y < MAZE_ROWS; y++) {
+        prev[y] = [];
+        for (let x = 0; x < MAZE_COLS; x++) {
+            prev[y][x] = null;
+        }
+    }
+    
+    // Направления движения (вверх, вниз, влево, вправо)
+    const directions = [
+        { dx: 0, dy: -1, name: 'up' },
+        { dx: 0, dy: 1, name: 'down' },
+        { dx: -1, dy: 0, name: 'left' },
+        { dx: 1, dy: 0, name: 'right' }
     ];
     
-    // Сортируем соседей по расстоянию до игрока
-    neighbors.sort((a, b) => {
-        const distA = Math.abs(a.x - playerGridX) + Math.abs(a.y - playerGridY);
-        const distB = Math.abs(b.x - playerGridX) + Math.abs(b.y - playerGridY);
-        return distA - distB;
-    });
-    
-    // Пробуем двигаться к ближайшему доступному соседу
-    for (let neighbor of neighbors) {
-        if (canMoveTo(neighbor.x, neighbor.y)) {
-            // Проверяем, не уводит ли это нас слишком далеко от цели
-            const currentDist = Math.abs(catGridX - playerGridX) + Math.abs(catGridY - playerGridY);
-            const newDist = Math.abs(neighbor.x - playerGridX) + Math.abs(neighbor.y - playerGridY);
+    // BFS - поиск пути
+    let found = false;
+    while (queue.length > 0) {
+        const current = queue.shift();
+        
+        // Если достигли цели
+        if (current.x === playerGridX && current.y === playerGridY) {
+            found = true;
+            break;
+        }
+        
+        // Проверяем всех соседей
+        for (let dir of directions) {
+            const nx = current.x + dir.dx;
+            const ny = current.y + dir.dy;
             
-            // Если новое расстояние не намного больше текущего, идем туда
-            if (newDist <= currentDist + 2) {
-                return neighbor.dir;
+            // Проверяем границы и доступность
+            if (nx >= 0 && nx < MAZE_COLS && ny >= 0 && ny < MAZE_ROWS) {
+                if (canMoveTo(nx, ny) && distances[ny][nx] === -1) {
+                    distances[ny][nx] = distances[current.y][current.x] + 1;
+                    prev[ny][nx] = { x: current.x, y: current.y };
+                    queue.push({ x: nx, y: ny });
+                }
             }
         }
     }
     
-    // Если ничего не подходит, пробуем любое доступное направление
-    for (let neighbor of neighbors) {
-        if (canMoveTo(neighbor.x, neighbor.y)) {
-            return neighbor.dir;
+    // Если путь найден, восстанавливаем его
+    if (found) {
+        const path = [];
+        let current = { x: playerGridX, y: playerGridY };
+        
+        // Восстанавливаем путь от цели к началу
+        while (current !== null) {
+            path.unshift({ x: current.x, y: current.y });
+            current = prev[current.y][current.x];
+        }
+        
+        catPath = path;
+        
+        // Определяем первое направление движения
+        if (path.length > 1) {
+            const firstStep = path[1];
+            const dx = firstStep.x - catGridX;
+            const dy = firstStep.y - catGridY;
+            
+            if (dx === 1) return 'right';
+            if (dx === -1) return 'left';
+            if (dy === 1) return 'down';
+            if (dy === -1) return 'up';
+        }
+    } else {
+        // Если путь не найден, пробуем любое доступное направление
+        catPath.push({ x: catGridX, y: catGridY });
+        for (let dir of directions) {
+            const nx = catGridX + dir.dx;
+            const ny = catGridY + dir.dy;
+            if (canMoveTo(nx, ny)) {
+                catPath.push({ x: nx, y: ny });
+                return dir.name;
+            }
         }
     }
     
@@ -384,24 +421,52 @@ function findPathToPlayer(catGridX, catGridY, playerGridX, playerGridY) {
 
 // Обновление котика (AI преследования)
 function updateCat() {
+    // Увеличиваем счетчик кадров для пересчета пути
+    lastPathRecalculation++;
+    
     // Если котик в центре клетки, выбираем направление
     const centerX = cat.gridX * CELL_SIZE + CELL_SIZE / 2;
     const centerY = cat.gridY * CELL_SIZE + CELL_SIZE / 2;
     const distToCenter = Math.abs(cat.pixelX - centerX) + Math.abs(cat.pixelY - centerY);
     
-    if (distToCenter < 3) {
-        cat.pixelX = centerX;
-        cat.pixelY = centerY;
+    // Пересчитываем путь периодически или когда котик в центре клетки
+    const shouldRecalculate = distToCenter < 3 || lastPathRecalculation >= PATH_RECALCULATION_INTERVAL;
+    
+    if (shouldRecalculate) {
+        if (distToCenter < 3) {
+            cat.pixelX = centerX;
+            cat.pixelY = centerY;
+            
+            // Обновляем grid позицию
+            cat.gridX = Math.floor(cat.pixelX / CELL_SIZE);
+            cat.gridY = Math.floor(cat.pixelY / CELL_SIZE);
+        }
         
-        // Обновляем grid позицию
-        cat.gridX = Math.floor(cat.pixelX / CELL_SIZE);
-        cat.gridY = Math.floor(cat.pixelY / CELL_SIZE);
-        
-        // Используем улучшенный алгоритм поиска пути
+        // Пересчитываем направление и путь, используя улучшенный алгоритм
         const direction = findPathToPlayer(cat.gridX, cat.gridY, player.gridX, player.gridY);
         if (direction) {
             cat.direction = direction;
+        } else {
+            // Если не можем найти путь, пробуем любое доступное направление
+            const allDirections = ['up', 'down', 'left', 'right'];
+            for (let dir of allDirections) {
+                let newGridX = cat.gridX;
+                let newGridY = cat.gridY;
+                
+                if (dir === 'left') newGridX--;
+                if (dir === 'right') newGridX++;
+                if (dir === 'up') newGridY--;
+                if (dir === 'down') newGridY++;
+                
+                if (canMoveTo(newGridX, newGridY)) {
+                    cat.direction = dir;
+                    break;
+                }
+            }
         }
+        
+        // Сбрасываем счетчик пересчета
+        lastPathRecalculation = 0;
     }
     
     // Движение котика
@@ -430,8 +495,7 @@ function updateCat() {
             cat.gridX = newGridX;
             cat.gridY = newGridY;
         } else {
-            const centerX = cat.gridX * CELL_SIZE + CELL_SIZE / 2;
-            const centerY = cat.gridY * CELL_SIZE + CELL_SIZE / 2;
+            // Достигли препятствия, выравниваем позицию и сбрасываем направление
             cat.pixelX = centerX;
             cat.pixelY = centerY;
             cat.direction = null;
@@ -539,66 +603,69 @@ function drawPlayer() {
 
 // Отрисовка котика
 function drawCat() {
+    const centerX = cat.x + cat.width / 2;
+    const headY = cat.y - 5;
+    
     // Тело
     ctx.fillStyle = cat.color;
     ctx.beginPath();
-    ctx.ellipse(cat.x + cat.width / 2, cat.y + cat.height / 2, 
+    ctx.ellipse(centerX, cat.y + cat.height / 2, 
                 cat.width / 2, cat.height / 2, 0, 0, Math.PI * 2);
     ctx.fill();
     
-    // Голова
+    // Голова (рисуем после ушей, чтобы уши были поверх)
     ctx.fillStyle = cat.color;
     ctx.beginPath();
-    ctx.arc(cat.x + cat.width / 2, cat.y - 3, 8, 0, Math.PI * 2);
+    ctx.arc(centerX, headY, 8, 0, Math.PI * 2);
     ctx.fill();
     
-    // Уши (левое)
+    // Уши (левое) - рисуем ПЕРЕД головой, чтобы были видны
     ctx.fillStyle = cat.color;
     ctx.beginPath();
-    ctx.moveTo(cat.x + cat.width / 2 - 4, cat.y - 3);
-    ctx.lineTo(cat.x + cat.width / 2 - 8, cat.y - 12);
-    ctx.lineTo(cat.x + cat.width / 2 - 1, cat.y - 3);
+    ctx.moveTo(centerX - 3, headY - 2);
+    ctx.lineTo(centerX - 10, headY - 15);
+    ctx.lineTo(centerX - 1, headY - 2);
     ctx.closePath();
     ctx.fill();
     
     // Внутренняя часть уха (левое)
     ctx.fillStyle = '#FFB6C1';
     ctx.beginPath();
-    ctx.moveTo(cat.x + cat.width / 2 - 4, cat.y - 3);
-    ctx.lineTo(cat.x + cat.width / 2 - 6, cat.y - 8);
-    ctx.lineTo(cat.x + cat.width / 2 - 2, cat.y - 3);
+    ctx.moveTo(centerX - 3, headY - 2);
+    ctx.lineTo(centerX - 7, headY - 10);
+    ctx.lineTo(centerX - 2, headY - 2);
     ctx.closePath();
     ctx.fill();
     
     // Уши (правое)
     ctx.fillStyle = cat.color;
     ctx.beginPath();
-    ctx.moveTo(cat.x + cat.width / 2 + 1, cat.y - 3);
-    ctx.lineTo(cat.x + cat.width / 2 + 8, cat.y - 12);
-    ctx.lineTo(cat.x + cat.width / 2 + 4, cat.y - 3);
+    ctx.moveTo(centerX + 1, headY - 2);
+    ctx.lineTo(centerX + 10, headY - 15);
+    ctx.lineTo(centerX + 3, headY - 2);
     ctx.closePath();
     ctx.fill();
     
     // Внутренняя часть уха (правое)
     ctx.fillStyle = '#FFB6C1';
     ctx.beginPath();
-    ctx.moveTo(cat.x + cat.width / 2 + 1, cat.y - 3);
-    ctx.lineTo(cat.x + cat.width / 2 + 6, cat.y - 8);
-    ctx.lineTo(cat.x + cat.width / 2 + 2, cat.y - 3);
+    ctx.moveTo(centerX + 1, headY - 2);
+    ctx.lineTo(centerX + 7, headY - 10);
+    ctx.lineTo(centerX + 2, headY - 2);
     ctx.closePath();
     ctx.fill();
     
     // Глаза
     ctx.fillStyle = '#000000';
     ctx.beginPath();
-    ctx.arc(cat.x + cat.width / 2 - 3, cat.y - 5, 2, 0, Math.PI * 2);
-    ctx.arc(cat.x + cat.width / 2 + 3, cat.y - 5, 2, 0, Math.PI * 2);
+    ctx.arc(centerX - 3, headY - 1, 2, 0, Math.PI * 2);
+    ctx.arc(centerX + 3, headY - 1, 2, 0, Math.PI * 2);
     ctx.fill();
     
     // Нос
     ctx.fillStyle = '#FFB6C1';
     ctx.beginPath();
-    ctx.arc(cat.x + cat.width / 2, cat.y - 2, 2, 0, Math.PI * 2);
+    ctx.arc(centerX, headY + 2, 2, 0, Math.PI * 2);
     ctx.fill();
     
     // Хвост
@@ -610,6 +677,44 @@ function drawCat() {
     ctx.stroke();
 }
 
+// Отрисовка пути преследования
+function drawCatPath() {
+    if (catPath.length < 2) return;
+    
+    // Рисуем линию пути
+    ctx.strokeStyle = 'rgba(255, 165, 0, 0.6)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([5, 5]);
+    ctx.beginPath();
+    
+    for (let i = 0; i < catPath.length; i++) {
+        const point = catPath[i];
+        const pixelX = point.x * CELL_SIZE + CELL_SIZE / 2;
+        const pixelY = point.y * CELL_SIZE + CELL_SIZE / 2;
+        
+        if (i === 0) {
+            ctx.moveTo(pixelX, pixelY);
+        } else {
+            ctx.lineTo(pixelX, pixelY);
+        }
+    }
+    
+    ctx.stroke();
+    ctx.setLineDash([]);
+    
+    // Рисуем точки на пути
+    for (let i = 1; i < catPath.length; i++) {
+        const point = catPath[i];
+        const pixelX = point.x * CELL_SIZE + CELL_SIZE / 2;
+        const pixelY = point.y * CELL_SIZE + CELL_SIZE / 2;
+        
+        ctx.fillStyle = i === 1 ? 'rgba(255, 165, 0, 0.8)' : 'rgba(255, 165, 0, 0.4)';
+        ctx.beginPath();
+        ctx.arc(pixelX, pixelY, 3, 0, Math.PI * 2);
+        ctx.fill();
+    }
+}
+
 // Отрисовка игры
 function draw() {
     // Очистка (темный фон)
@@ -619,6 +724,7 @@ function draw() {
     // Отрисовка элементов (порядок важен!)
     drawMaze();
     drawTraps();
+    drawCatPath(); // Рисуем путь преследования
     drawPlayer();
     drawCat();
     
