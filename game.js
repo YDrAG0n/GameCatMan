@@ -305,6 +305,83 @@ function updatePlayer() {
     player.y = player.pixelY - player.height / 2;
 }
 
+// Поиск пути к игроку (упрощенный алгоритм с обходом препятствий)
+function findPathToPlayer(catGridX, catGridY, playerGridX, playerGridY) {
+    // Простой алгоритм: пробуем найти направление, которое приближает к цели
+    // и обходит препятствия через соседние клетки
+    
+    const dx = playerGridX - catGridX;
+    const dy = playerGridY - catGridY;
+    
+    // Приоритетные направления (к игроку)
+    const preferredDirections = [];
+    if (Math.abs(dx) > Math.abs(dy)) {
+        if (dx > 0) preferredDirections.push('right');
+        if (dx < 0) preferredDirections.push('left');
+        if (dy > 0) preferredDirections.push('down');
+        if (dy < 0) preferredDirections.push('up');
+    } else {
+        if (dy > 0) preferredDirections.push('down');
+        if (dy < 0) preferredDirections.push('up');
+        if (dx > 0) preferredDirections.push('right');
+        if (dx < 0) preferredDirections.push('left');
+    }
+    
+    // Пробуем прямое направление
+    for (let dir of preferredDirections) {
+        let newGridX = catGridX;
+        let newGridY = catGridY;
+        
+        if (dir === 'left') newGridX--;
+        if (dir === 'right') newGridX++;
+        if (dir === 'up') newGridY--;
+        if (dir === 'down') newGridY++;
+        
+        if (canMoveTo(newGridX, newGridY)) {
+            return dir;
+        }
+    }
+    
+    // Если прямой путь заблокирован, пробуем обходные пути
+    // Проверяем соседние клетки и выбираем ту, которая ближе к цели
+    const neighbors = [
+        { dir: 'up', x: catGridX, y: catGridY - 1 },
+        { dir: 'down', x: catGridX, y: catGridY + 1 },
+        { dir: 'left', x: catGridX - 1, y: catGridY },
+        { dir: 'right', x: catGridX + 1, y: catGridY }
+    ];
+    
+    // Сортируем соседей по расстоянию до игрока
+    neighbors.sort((a, b) => {
+        const distA = Math.abs(a.x - playerGridX) + Math.abs(a.y - playerGridY);
+        const distB = Math.abs(b.x - playerGridX) + Math.abs(b.y - playerGridY);
+        return distA - distB;
+    });
+    
+    // Пробуем двигаться к ближайшему доступному соседу
+    for (let neighbor of neighbors) {
+        if (canMoveTo(neighbor.x, neighbor.y)) {
+            // Проверяем, не уводит ли это нас слишком далеко от цели
+            const currentDist = Math.abs(catGridX - playerGridX) + Math.abs(catGridY - playerGridY);
+            const newDist = Math.abs(neighbor.x - playerGridX) + Math.abs(neighbor.y - playerGridY);
+            
+            // Если новое расстояние не намного больше текущего, идем туда
+            if (newDist <= currentDist + 2) {
+                return neighbor.dir;
+            }
+        }
+    }
+    
+    // Если ничего не подходит, пробуем любое доступное направление
+    for (let neighbor of neighbors) {
+        if (canMoveTo(neighbor.x, neighbor.y)) {
+            return neighbor.dir;
+        }
+    }
+    
+    return null;
+}
+
 // Обновление котика (AI преследования)
 function updateCat() {
     // Если котик в центре клетки, выбираем направление
@@ -320,57 +397,10 @@ function updateCat() {
         cat.gridX = Math.floor(cat.pixelX / CELL_SIZE);
         cat.gridY = Math.floor(cat.pixelY / CELL_SIZE);
         
-        // Вычисляем направление к игроку
-        const dx = player.gridX - cat.gridX;
-        const dy = player.gridY - cat.gridY;
-        
-        // Пробуем двигаться в направлении игрока
-        const directions = [];
-        if (Math.abs(dx) > Math.abs(dy)) {
-            if (dx > 0) directions.push('right');
-            if (dx < 0) directions.push('left');
-            if (dy > 0) directions.push('down');
-            if (dy < 0) directions.push('up');
-        } else {
-            if (dy > 0) directions.push('down');
-            if (dy < 0) directions.push('up');
-            if (dx > 0) directions.push('right');
-            if (dx < 0) directions.push('left');
-        }
-        
-        // Пробуем каждое направление
-        for (let dir of directions) {
-            let newGridX = cat.gridX;
-            let newGridY = cat.gridY;
-            
-            if (dir === 'left') newGridX--;
-            if (dir === 'right') newGridX++;
-            if (dir === 'up') newGridY--;
-            if (dir === 'down') newGridY++;
-            
-            if (canMoveTo(newGridX, newGridY)) {
-                cat.direction = dir;
-                break;
-            }
-        }
-        
-        // Если не можем двигаться к игроку, пробуем любое доступное направление
-        if (!cat.direction) {
-            const allDirections = ['up', 'down', 'left', 'right'];
-            for (let dir of allDirections) {
-                let newGridX = cat.gridX;
-                let newGridY = cat.gridY;
-                
-                if (dir === 'left') newGridX--;
-                if (dir === 'right') newGridX++;
-                if (dir === 'up') newGridY--;
-                if (dir === 'down') newGridY++;
-                
-                if (canMoveTo(newGridX, newGridY)) {
-                    cat.direction = dir;
-                    break;
-                }
-            }
+        // Используем улучшенный алгоритм поиска пути
+        const direction = findPathToPlayer(cat.gridX, cat.gridY, player.gridX, player.gridY);
+        if (direction) {
+            cat.direction = direction;
         }
     }
     
@@ -517,20 +547,45 @@ function drawCat() {
     ctx.fill();
     
     // Голова
+    ctx.fillStyle = cat.color;
     ctx.beginPath();
     ctx.arc(cat.x + cat.width / 2, cat.y - 3, 8, 0, Math.PI * 2);
     ctx.fill();
     
-    // Уши
+    // Уши (левое)
+    ctx.fillStyle = cat.color;
     ctx.beginPath();
-    ctx.moveTo(cat.x + cat.width / 2 - 5, cat.y - 5);
-    ctx.lineTo(cat.x + cat.width / 2 - 2, cat.y - 10);
-    ctx.lineTo(cat.x + cat.width / 2, cat.y - 5);
+    ctx.moveTo(cat.x + cat.width / 2 - 4, cat.y - 3);
+    ctx.lineTo(cat.x + cat.width / 2 - 8, cat.y - 12);
+    ctx.lineTo(cat.x + cat.width / 2 - 1, cat.y - 3);
+    ctx.closePath();
     ctx.fill();
+    
+    // Внутренняя часть уха (левое)
+    ctx.fillStyle = '#FFB6C1';
     ctx.beginPath();
-    ctx.moveTo(cat.x + cat.width / 2, cat.y - 5);
-    ctx.lineTo(cat.x + cat.width / 2 + 2, cat.y - 10);
-    ctx.lineTo(cat.x + cat.width / 2 + 5, cat.y - 5);
+    ctx.moveTo(cat.x + cat.width / 2 - 4, cat.y - 3);
+    ctx.lineTo(cat.x + cat.width / 2 - 6, cat.y - 8);
+    ctx.lineTo(cat.x + cat.width / 2 - 2, cat.y - 3);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Уши (правое)
+    ctx.fillStyle = cat.color;
+    ctx.beginPath();
+    ctx.moveTo(cat.x + cat.width / 2 + 1, cat.y - 3);
+    ctx.lineTo(cat.x + cat.width / 2 + 8, cat.y - 12);
+    ctx.lineTo(cat.x + cat.width / 2 + 4, cat.y - 3);
+    ctx.closePath();
+    ctx.fill();
+    
+    // Внутренняя часть уха (правое)
+    ctx.fillStyle = '#FFB6C1';
+    ctx.beginPath();
+    ctx.moveTo(cat.x + cat.width / 2 + 1, cat.y - 3);
+    ctx.lineTo(cat.x + cat.width / 2 + 6, cat.y - 8);
+    ctx.lineTo(cat.x + cat.width / 2 + 2, cat.y - 3);
+    ctx.closePath();
     ctx.fill();
     
     // Глаза
@@ -538,6 +593,12 @@ function drawCat() {
     ctx.beginPath();
     ctx.arc(cat.x + cat.width / 2 - 3, cat.y - 5, 2, 0, Math.PI * 2);
     ctx.arc(cat.x + cat.width / 2 + 3, cat.y - 5, 2, 0, Math.PI * 2);
+    ctx.fill();
+    
+    // Нос
+    ctx.fillStyle = '#FFB6C1';
+    ctx.beginPath();
+    ctx.arc(cat.x + cat.width / 2, cat.y - 2, 2, 0, Math.PI * 2);
     ctx.fill();
     
     // Хвост
