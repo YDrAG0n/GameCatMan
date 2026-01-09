@@ -123,19 +123,20 @@ function handleMouseAction(e, isRightClick = false) {
                 maze[cell.row][cell.col] = 0;
             }
         } else if (currentTool === 'diamond') {
-            // Работа с алмазами (как со стенами - ЛКМ)
+            // Работа с алмазами (set - всегда ставим, как стены)
             if (cell.col > 0 && cell.col < MAZE_COLS - 1 && 
                 cell.row > 0 && cell.row < MAZE_ROWS - 1) {
-                const diamondIndex = diamonds.findIndex(d => 
-                    Math.floor(d.x / CELL_SIZE) === cell.col && 
-                    Math.floor(d.y / CELL_SIZE) === cell.row
-                );
-                
-                if (diamondIndex !== -1) {
-                    // Удаляем алмаз, если он уже есть
-                    diamonds.splice(diamondIndex, 1);
-                } else if (maze[cell.row][cell.col] === 1) {
-                    // Добавляем алмаз, если клетка проходима
+                if (maze[cell.row][cell.col] === 1) {
+                    // Удаляем алмаз, если он уже есть в этой клетке
+                    const diamondIndex = diamonds.findIndex(d => 
+                        Math.floor(d.x / CELL_SIZE) === cell.col && 
+                        Math.floor(d.y / CELL_SIZE) === cell.row
+                    );
+                    if (diamondIndex !== -1) {
+                        diamonds.splice(diamondIndex, 1);
+                    }
+                    
+                    // Всегда ставим алмаз (set, не toggle)
                     diamonds.push({
                         x: cell.col * CELL_SIZE,
                         y: cell.row * CELL_SIZE,
