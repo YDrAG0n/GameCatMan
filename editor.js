@@ -81,68 +81,69 @@ function handleMouseAction(e, isRightClick = false) {
         return;
     }
     
-    // ПКМ - работа с ловушками и алмазами
+    // ПКМ - работа с ловушками
     if (isRightClick || e.button === 2) {
-        if (currentTool === 'diamond') {
-            // Работа с алмазами
-            const diamondIndex = diamonds.findIndex(d => 
-                Math.floor(d.x / CELL_SIZE) === cell.col && 
-                Math.floor(d.y / CELL_SIZE) === cell.row
-            );
-            
-            if (diamondIndex !== -1) {
-                // Удаляем алмаз
-                diamonds.splice(diamondIndex, 1);
-            } else if (maze[cell.row][cell.col] === 1) {
-                // Добавляем алмаз
-                diamonds.push({
+        // Работа с ловушками
+        const trapIndex = traps.findIndex(t => 
+            Math.floor(t.x / CELL_SIZE) === cell.col && 
+            Math.floor(t.y / CELL_SIZE) === cell.row
+        );
+        
+        if (trapIndex !== -1) {
+            // Удаляем ловушку
+            traps.splice(trapIndex, 1);
+        } else if (maze[cell.row][cell.col] === 1) {
+            // Добавляем ловушку в зависимости от текущего инструмента
+            if (currentTool === 'trapLow') {
+                traps.push({
                     x: cell.col * CELL_SIZE,
                     y: cell.row * CELL_SIZE,
-                    width: CELL_SIZE * 0.6,
-                    height: CELL_SIZE * 0.6,
-                    collected: false
+                    width: CELL_SIZE,
+                    height: CELL_SIZE / 2,
+                    type: 'low',
+                    active: true
                 });
-            }
-        } else {
-            // Работа с ловушками
-            const trapIndex = traps.findIndex(t => 
-                Math.floor(t.x / CELL_SIZE) === cell.col && 
-                Math.floor(t.y / CELL_SIZE) === cell.row
-            );
-            
-            if (trapIndex !== -1) {
-                // Удаляем ловушку
-                traps.splice(trapIndex, 1);
-            } else if (maze[cell.row][cell.col] === 1) {
-                // Добавляем ловушку в зависимости от текущего инструмента
-                if (currentTool === 'trapLow') {
-                    traps.push({
-                        x: cell.col * CELL_SIZE,
-                        y: cell.row * CELL_SIZE,
-                        width: CELL_SIZE,
-                        height: CELL_SIZE / 2,
-                        type: 'low',
-                        active: true
-                    });
-                } else if (currentTool === 'trapHigh') {
-                    traps.push({
-                        x: cell.col * CELL_SIZE,
-                        y: cell.row * CELL_SIZE,
-                        width: CELL_SIZE,
-                        height: CELL_SIZE,
-                        type: 'high',
-                        active: true
-                    });
-                }
+            } else if (currentTool === 'trapHigh') {
+                traps.push({
+                    x: cell.col * CELL_SIZE,
+                    y: cell.row * CELL_SIZE,
+                    width: CELL_SIZE,
+                    height: CELL_SIZE,
+                    type: 'high',
+                    active: true
+                });
             }
         }
     } else {
-        // ЛКМ - работа со стенами
+        // ЛКМ - работа со стенами и алмазами
         if (currentTool === 'wall') {
             // Ставим стену (но не на границах)
             if (cell.col > 0 && cell.col < MAZE_COLS - 1 && 
                 cell.row > 0 && cell.row < MAZE_ROWS - 1) {
                 maze[cell.row][cell.col] = 0;
+            }
+        } else if (currentTool === 'diamond') {
+            // Работа с алмазами (как со стенами - ЛКМ)
+            if (cell.col > 0 && cell.col < MAZE_COLS - 1 && 
+                cell.row > 0 && cell.row < MAZE_ROWS - 1) {
+                const diamondIndex = diamonds.findIndex(d => 
+                    Math.floor(d.x / CELL_SIZE) === cell.col && 
+                    Math.floor(d.y / CELL_SIZE) === cell.row
+                );
+                
+                if (diamondIndex !== -1) {
+                    // Удаляем алмаз, если он уже есть
+                    diamonds.splice(diamondIndex, 1);
+                } else if (maze[cell.row][cell.col] === 1) {
+                    // Добавляем алмаз, если клетка проходима
+                    diamonds.push({
+                        x: cell.col * CELL_SIZE,
+                        y: cell.row * CELL_SIZE,
+                        width: CELL_SIZE * 0.6,
+                        height: CELL_SIZE * 0.6,
+                        collected: false
+                    });
+                }
             }
         } else if (currentTool === 'clear') {
             // Очищаем клетку
@@ -159,16 +160,6 @@ function handleMouseAction(e, isRightClick = false) {
                     Math.floor(d.x / CELL_SIZE) !== cell.col || 
                     Math.floor(d.y / CELL_SIZE) !== cell.row
                 );
-            }
-        } else if (currentTool === 'diamond') {
-            // ЛКМ на алмаз - удаляем его
-            const diamondIndex = diamonds.findIndex(d => 
-                Math.floor(d.x / CELL_SIZE) === cell.col && 
-                Math.floor(d.y / CELL_SIZE) === cell.row
-            );
-            
-            if (diamondIndex !== -1) {
-                diamonds.splice(diamondIndex, 1);
             }
         }
     }
